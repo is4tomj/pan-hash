@@ -4,13 +4,12 @@
 #include <openssl/sha.h>
 #include <string.h>
 
-void sha256(char *string, char outputBuffer[65])
+void sha256(char *string, SHA256_CTX* sha256ctx, char outputBuffer[65])
 {
     unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, string, strlen(string));
-    SHA256_Final(hash, &sha256);
+    SHA256_Init(sha256ctx);
+    SHA256_Update(sha256ctx, string, strlen(string));
+    SHA256_Final(hash, sha256ctx);
     for(int i = 0; i < SHA256_DIGEST_LENGTH; i++)
     {
         sprintf(outputBuffer + (i * 2), "%02x", hash[i]);
@@ -30,16 +29,17 @@ int main(int argv, char** argc)
     
     //printf("hello world: %s\n", hash);
     // 16 numbers, six being fixed and 1 being a luhn, means only 9 values
-    const unsigned long long init = 5191230000000000;
+    const unsigned long long init = 1111110000000000;
     unsigned long long i = init;
     const unsigned long long max = init+ 10000000000;
     const int parity = 16 % 2;
 
-    char panChars[PAN_CARDSIZE+1];
+    char panChars[PAN_CARDSIZE+1]; // this needs extra byte for \0
+    SHA256_CTX sha256ctx; // should be unique per thread
+    char hash[256];
 
     for(; i<max; i+=10)
     {
-        //printf("i:%llu\n", i);
         // compute luhn
         unsigned long long luhn = 0;
         unsigned long long val = i;
@@ -50,7 +50,7 @@ int main(int argv, char** argc)
             val /= 10;
             digit = val%10;
 
-            if((j-1)%2 == parity) // if odd
+            if(j%2 == 1) // if odd
             {
                 digit = digit * 2;
                 luhn += digit/10;
@@ -65,8 +65,7 @@ int main(int argv, char** argc)
         memcpy(buff+offset, panChars, PAN_CARDSIZE);
         offset += PAN_CARDSIZE;
 
-        char hash[256];
-        sha256(panChars, hash);
+        sha256(panChars, &sha256ctx, hash);
         memcpy(buff+offset, hash, PAN_HASHSIZE);
         offset += PAN_HASHSIZE;
 
@@ -83,7 +82,7 @@ int main(int argv, char** argc)
     }
     // flush buffer to stdout
     fwrite(buff, offset, 1, stdout);
-    fprintf(stderr, "100%%");
+    fprintf(stderr, "\r100%%\n");
 
             
     printf("\n");
